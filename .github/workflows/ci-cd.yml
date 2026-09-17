@@ -345,9 +345,10 @@ jobs:
             -v /tmp/trivy-cache:/root/.cache/trivy \
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
             config --severity CRITICAL,HIGH \
-              --exit-code 0 --no-progress /scan
+              --exit-code 0 /scan
 
       - name: Trivy - segredos no repositorio
+        if: always()
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/scan:ro" \
@@ -358,9 +359,11 @@ jobs:
               --exit-code 0 --no-progress /scan
 
       - name: Construir a imagem de runtime para varredura
+        if: always()
         run: docker build -t scan-target:ci --target runtime .
 
       - name: Trivy - vulnerabilidades na imagem de runtime (SO + .jar)
+        if: always()
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
