@@ -241,7 +241,11 @@ jobs:
 
           echo "aguardando readiness..."
           for i in $(seq 1 45); do
-            if curl -sf http://localhost:8080/actuator/health/readiness | grep -q '"status":"UP"'; then
+            # A saida e guardada antes do grep: com `set -o pipefail`, um
+            # `curl | grep -q` falharia porque o grep fecha o pipe no primeiro
+            # match e o curl termina com erro de escrita (exit 23).
+            READY=$(curl -sf http://localhost:8080/actuator/health/readiness || true)
+            if echo "${READY}" | grep -q '"status":"UP"'; then
               echo "aplicacao pronta apos ${i} tentativa(s)"
               break
             fi
@@ -259,10 +263,13 @@ jobs:
           echo "  ok  GET /api/demo/bad-request  -> 400"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/demo/error)" = "500"
           echo "  ok  GET /api/demo/error        -> 500"
-          curl -sf http://localhost:8080/actuator/prometheus | grep -q 'jvm_memory_used_bytes'
+          METRICS=$(curl -sf http://localhost:8080/actuator/prometheus)
+          echo "${METRICS}" | grep -q 'jvm_memory_used_bytes'
           echo "  ok  /actuator/prometheus expoe metricas da JVM"
-          curl -sf http://localhost:8080/actuator/prometheus | grep -q 'http_server_requests_seconds_count'
+          echo "${METRICS}" | grep -q 'http_server_requests_seconds_count'
           echo "  ok  /actuator/prometheus expoe metricas HTTP"
+          echo "${METRICS}" | grep -q 'application="spring-devops-observability"'
+          echo "  ok  /actuator/prometheus aplica as tags comuns"
 
           docker rm -f ci-app
 
@@ -300,7 +307,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Trivy - dependencias e configuracao do repositorio
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           scan-type: fs
           scan-ref: .
@@ -313,7 +320,7 @@ jobs:
         run: docker build -t scan-target:ci --target runtime .
 
       - name: Trivy - imagem Docker de runtime
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           scan-type: image
           image-ref: scan-target:ci
@@ -323,7 +330,7 @@ jobs:
           format: table
 
       - name: Trivy - segredos no repositorio
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           scan-type: fs
           scan-ref: .
