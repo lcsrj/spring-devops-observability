@@ -143,7 +143,7 @@ Medido na imagem realmente construída:
 | Estágio 2 | `eclipse-temurin:21.0.12_8-jre-alpine` |
 | Copiado para o runtime | apenas `/app/app.jar` (29 MB) |
 | Imagem de build | 800 MB |
-| **Imagem final** | **398 MB** local · 266 MB no GHCR (linux/amd64) |
+| **Imagem final** | **398 MB** local (descomprimido) · **121 MB** no GHCR (soma das 9 camadas comprimidas) |
 | `mvn` / `javac` / `jar` no runtime | **AUSENTES** |
 | Arquivos `.java` / `pom.xml` no runtime | **0 / 0** |
 | `/root/.m2` no runtime | **ausente** |
@@ -400,7 +400,7 @@ spring-devops-observability/
 ├── graylog/init/create-gelf-input.sh
 ├── scripts/                             # lib, wait-stack, generate-traffic,
 │                                        # smoke-test, verify-stack, capture-evidence
-└── docs/evidencias/                     # 3 de 17 arquivos (ver seção 6.2)
+└── docs/evidencias/                     # 16 arquivos (ver seção 6.2)
 ```
 
 ---
@@ -439,7 +439,7 @@ chore: estrutura inicial do projeto Maven
 | Aplicação Spring funciona | ✅ |
 | Interface funciona | ✅ |
 | Endpoints funcionam | ✅ |
-| Testes passam | ✅ 22/22 |
+| Testes passam | ✅ 23/23 |
 | Dockerfile é multistage | ✅ verificado por inspeção da imagem |
 | Imagem Docker compila | ✅ |
 | Compose sobe a stack | ✅ de primeira, 7 serviços healthy |

@@ -249,7 +249,7 @@ motivo alheio à aplicação — o disco cheio no laptop só antecipou o problem
 | Aplicação Spring funciona | ✅ |
 | Interface funciona | ✅ |
 | Endpoints funcionam | ✅ |
-| Testes passam (22/22) | ✅ |
+| Testes passam (23/23) | ✅ |
 | Dockerfile é multistage | ✅ |
 | Imagem Docker compila | ✅ |
 | Compose sobe a stack | ✅ |

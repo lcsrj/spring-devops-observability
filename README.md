@@ -132,6 +132,26 @@ flowchart LR
    configuração no MongoDB e indexa as mensagens no OpenSearch.
 6. O serviço `graylog-init` cria o Input GELF pela API do Graylog na subida da stack.
 
+### Ciclo de vida de uma requisição
+
+O caminho de uma única chamada a `GET /api/demo/error`, na ordem em que o código executa:
+
+| Ordem | Componente | O que acontece |
+|---|---|---|
+| 1 | `CorrelationIdFilter` | Lê o header `X-Correlation-Id` ou gera um novo. Coloca no **MDC** do Logback e no header da resposta. Todo log emitido a partir daqui carrega esse id. |
+| 2 | `ActionAuditInterceptor` (`preHandle`) | Marca o instante inicial. Só atua em `/api/demo/**`, então o polling de `/api/status` não polui o histórico. |
+| 3 | `DemoController` | Executa a ação pedida — aqui, lança a exceção que produz o 500. |
+| 4 | `ApiExceptionHandler` | Traduz a exceção em resposta HTTP real (400 ou 500) e emite o log `WARN`/`ERROR` **com o stack trace**. |
+| 5 | `ActionAuditInterceptor` (`afterCompletion`) | Calcula a duração, lê o status final e grava no `ActionHistoryService`. Status e duração são medidos **no servidor**, não no navegador. |
+| 6 | Micrometer (automático) | Incrementa `http_server_requests_seconds` com as tags `status`, `uri`, `method`, `outcome`, somadas às tags comuns `application`/`environment`/`version` do `MetricsConfig`. |
+| 7 | Logback → GELF | O appender assíncrono despacha o evento por UDP para o Graylog, com `correlation_id` e os demais campos. |
+| 8 | Prometheus | No próximo scrape (5s), coleta a série já atualizada em `/actuator/prometheus`. |
+| 9 | Grafana | O painel correspondente reflete a mudança na consulta seguinte. |
+
+Ou seja: **uma requisição produz simultaneamente uma métrica e um log correlacionado**, e os
+dois chegam a ferramentas distintas sem nenhum passo manual. O `correlation_id` é o que
+permite sair de um pico no gráfico do Grafana e achar a mensagem exata no Graylog.
+
 ### Ordem de inicialização (`depends_on` + healthchecks)
 
 ```text
@@ -758,7 +778,8 @@ spring-devops-observability/
 │   ├── wait-stack.sh                     # espera readiness real
 │   ├── generate-traffic.sh               # tráfego 2xx/4xx/5xx + logs
 │   ├── smoke-test.sh                     # 28 verificações rápidas
-│   └── verify-stack.sh                   # auditoria completa
+│   ├── verify-stack.sh                   # auditoria completa
+│   └── capture-evidence.sh               # gera docs/evidencias/ (screenshots + saídas)
 └── docs/evidencias/                      # saídas e capturas de validação
 ```
 
@@ -918,6 +939,9 @@ entre a máquina do desenvolvedor, o build da imagem e a pipeline.
 | Build Maven lento na primeira vez | Download das dependências | Normal; as execuções seguintes usam o cache de camadas do Docker |
 | Estado inconsistente após alterações | Volumes antigos | `docker compose down -v && docker compose up --build -d` |
 | Comandos `docker` travando, disco cheio | Cada `--build` acrescenta camadas ao cache de build, que cresce rápido (chegou a 12 GB durante o desenvolvimento) | Use `docker compose up -d` (sem `--build`) quando a imagem já existir; para recuperar espaço: `docker builder prune -af` e `docker image prune -a` |
+| Disco enche de repente e o Docker morre com `500 Internal Server Error` no `/_ping` | Em Windows/WSL2, o **Chromium headless da captura de tela apontado para a SPA do Graylog derruba a VM do WSL**, e cada crash grava um dump de ~14 GB em `%LOCALAPPDATA%\Temp\wsl-crashes`. O disco cheio é **consequência**, não causa | Confira `ls -lh "$LOCALAPPDATA/Temp/wsl-crashes"` — o nome do dump identifica o processo culpado — e apague o conteúdo. A captura dessa tela já vem desabilitada (`CAPTURE_GRAYLOG_UI=0`). Para não gerar mais dumps: `crashDumpCount=0` sob `[wsl2]` em `%USERPROFILE%\.wslconfig`, seguido de `wsl --shutdown` |
+| Um arquivo do projeto aparece com 0 byte | Uma escrita que caia no instante em que o disco zera trunca o arquivo | Se estiver versionado: `git checkout -- <arquivo>`. Libere espaço antes de repetir a operação |
+| `/actuator/health` responde **503** com a aplicação atendendo normalmente | Algum `HealthIndicator` agregado está `DOWN` por motivo alheio à aplicação — o caso clássico é o de espaço em disco | Veja quais componentes estão `DOWN` em `curl -s localhost:8080/actuator/health`. O indicador de disco vem **desabilitado** neste projeto; a seção 17 explica por quê |
 
 Logs úteis:
 
