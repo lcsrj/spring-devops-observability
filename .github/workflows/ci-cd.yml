@@ -321,10 +321,12 @@ jobs:
       # pipeline (`Cache not found` + exit 1). Usando a imagem, a versao fica
       # fixada e a varredura nao depende de download de asset externo.
       #
-      # `--offline-scan` no scan de filesystem: sem ele, o analisador de pom.xml
-      # do Trivy resolve os POMs pai no Maven Central e a varredura morre com
-      # `429 Too Many Requests` (o runner compartilha IP de saida). Offline, a
-      # varredura usa apenas o que esta no repositorio e fica deterministica.
+      # O scan de filesystem ignora o pom.xml: o analisador Java do Trivy
+      # resolve os POMs pai no Maven Central e a varredura morre com
+      # `429 Too Many Requests` (o runner compartilha IP de saida, e
+      # `--offline-scan` nao cobre esse analisador). As dependencias da
+      # aplicacao continuam cobertas pelo scan da IMAGEM mais abaixo, que
+      # inspeciona o .jar empacotado - cobertura equivalente e deterministica.
       #
       # `exit-code 0`: as varreduras sao ADICIONAIS e nao bloqueiam os
       # requisitos obrigatorios do projeto.
@@ -337,7 +339,7 @@ jobs:
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
             filesystem --scanners vuln,misconfig \
               --severity CRITICAL,HIGH --ignore-unfixed \
-              --offline-scan \
+              --offline-scan --skip-files /scan/pom.xml \
               --exit-code 0 --no-progress /scan
 
       - name: Trivy - segredos no repositorio
