@@ -12,12 +12,12 @@
 | | |
 |---|---|
 | **Status geral** | ✅ **Projeto concluído** — validado localmente, publicado no GitHub, pipeline verde, imagem no GHCR |
-| **Testes** | 22/22 passando |
+| **Testes** | 23/23 passando |
 | **Auditoria local** | 83/83 verificações |
 | **Smoke test** | 28/28 |
 | **Pipeline CI/CD** | `conclusion: success` nos 4 jobs |
 | **GHCR** | `:latest` · `:1.0.0` · `:main` · `:sha-2db9b29` |
-| **Evidências** | 17 arquivos em `docs/evidencias/` |
+| **Evidências** | 16 arquivos em `docs/evidencias/` |
 | **Commits** | 15 commits organizados na branch `main` |
 
 ---
@@ -116,12 +116,12 @@ sucesso/erro e layout responsivo (testado em 1600px e em largura de telefone).
 O indicador "Envio ao Graylog" **não é texto fixo**: a aplicação consulta o Logback
 (`root.getAppender("GELF")`) e reporta se o appender está realmente anexado.
 
-### 4.3 Testes ✅ — 22/22
+### 4.3 Testes ✅ — 23/23
 
 | Classe | Testes |
 |---|---|
 | `ObservabilityApplicationTests` | 2 — contexto inicializa, propriedades carregadas |
-| `StatusEndpointTests` | 8 — interface HTML, `/api/status`, correlation id, health, info, `/actuator/prometheus` com métricas de JVM/CPU/threads/uptime/HTTP, endpoints administrativos ausentes |
+| `StatusEndpointTests` | 9 — interface HTML, `/api/status`, correlation id, health (incluindo a garantia de que ele nao depende de disco do host), info, `/actuator/prometheus` com métricas de JVM/CPU/threads/uptime/HTTP, endpoints administrativos ausentes |
 | `DemoEndpointTests` | 7 — 200/400/500, os 4 endpoints de log com contador por nível, histórico, polling fora do histórico, limite do buffer |
 | `TrafficGeneratorIntegrationTests` | 5 — servidor HTTP real (`RANDOM_PORT`): porta descoberta, rajada 7/2/1, default, teto de 200, séries 2xx/4xx/5xx no `/actuator/prometheus` |
 
@@ -286,8 +286,9 @@ capturas de tela), nenhum por inspeção de código:
 | 7 | `aquasecurity/trivy-action@0.28.0` não resolve | CI: `unable to find version` | As tags do repositório usam prefixo `v` |
 | 8 | Step do CI falhava com **exit 23** apesar da aplicação responder certo | `curl \| grep -q` com `set -o pipefail`: o `grep -q` fecha o pipe e o produtor morre com Broken pipe | Respostas gravadas em arquivo; `grep` lê o arquivo. Sem pipe algum |
 | 9 | Trivy falhava com `429 Too Many Requests` do Maven Central | CI | varredura de configuração passou a usar `trivy config`; vulnerabilidades ficaram no scan da imagem |
-| 10 | `/actuator/health` respondia **503** com a aplicação saudável | O `DiskSpaceHealthIndicator` estava ativo e o disco do host havia enchido: o indicador agregado derrubava o health inteiro | Indicador desabilitado (a aplicação não usa disco) e teste novo travando a decisão |
+| 10 | `/actuator/health` respondia **503** com a aplicação saudável | O `DiskSpaceHealthIndicator` mede o disco do caminho onde o processo roda; o volume havia enchido e, por ser agregado, ele derrubava o health inteiro | Indicador desabilitado (a aplicação não usa disco) e teste novo travando a decisão |
 | 11 | `timeout` do host não matava capturas travadas do Chromium | Em Git Bash/MSYS o sinal não chega ao `docker.exe`, que é processo nativo do Windows | Limite de tempo movido para **dentro** do container, com o `timeout` do busybox |
+| 12 | Disco de 238 GB enchia repetidamente, levando o Docker com ele | O Chromium headless apontado para a SPA do Graylog **derruba a VM do WSL**; cada crash grava um dump de ~14 GB em `%LOCALAPPDATA%\Temp\wsl-crashes`. O disco cheio derrubava o engine do Docker em seguida — o que parecia ser a causa era a consequência | Captura da interface do Graylog virou **opt-in** (`CAPTURE_GRAYLOG_UI=1`), com o motivo documentado no script. O Graylog continua comprovado por 3 evidências de API |
 
 ---
 
@@ -393,7 +394,7 @@ spring-devops-observability/
 │   ├── application.yml  logback-spring.xml
 │   ├── templates/index.html
 │   └── static/{css,js,img}/
-├── src/test/java/...                    # 22 testes
+├── src/test/java/...                    # 23 testes
 ├── prometheus/prometheus.yml
 ├── grafana/{provisioning/{datasources,dashboards},dashboards}/
 ├── graylog/init/create-gelf-input.sh
@@ -423,7 +424,7 @@ ci: pipeline CI/CD com GitHub Actions e publicacao no GHCR
 feat: scripts de validacao e captura de evidencias
 feat: stack completa em um unico docker compose
 build: Dockerfile multistage (requisito eliminatorio)
-test: suite de 22 testes automatizados
+test: suite de 23 testes automatizados
 feat: interface web do painel de observabilidade
 feat: aplicacao Spring Boot com endpoints, metricas e logs GELF
 chore: estrutura inicial do projeto Maven

@@ -501,12 +501,12 @@ Opções úteis do `verify-stack.sh`:
 
 ## 11. Testes automatizados
 
-**22 testes** cobrindo:
+**23 testes** cobrindo:
 
 | Classe | Cobertura |
 |---|---|
 | `ObservabilityApplicationTests` | O contexto do Spring inicializa; beans principais registrados; propriedades carregadas (inclusive a versão filtrada pelo Maven) |
-| `StatusEndpointTests` | `GET /` entrega a interface; `/api/status`; propagação do correlation id; `/actuator/health`; `/actuator/info`; `/actuator/prometheus` com métricas de JVM, CPU, threads, uptime e HTTP; endpoints administrativos **não** expostos |
+| `StatusEndpointTests` | `GET /` entrega a interface; `/api/status`; propagação do correlation id; `/actuator/health` (e a garantia de que ele **nao** depende de espaco em disco do host); `/actuator/info`; `/actuator/prometheus` com métricas de JVM, CPU, threads, uptime e HTTP; endpoints administrativos **não** expostos |
 | `DemoEndpointTests` | Endpoints 200, 400 e 500; os quatro endpoints de log com contador por nível; histórico com status e duração; polling de estado não poluindo o histórico; limite do histórico |
 | `TrafficGeneratorIntegrationTests` | Servidor HTTP real (`RANDOM_PORT`): descoberta da porta, rajada com distribuição 7×2xx / 2×4xx / 1×5xx, quantidade default, teto de 200 e presença das séries 2xx/4xx/5xx em `/actuator/prometheus` |
 
@@ -834,13 +834,14 @@ mantêm o status correto e apenas as falhas da própria aplicação caem na rede
 
 ### Indicador de espaço em disco desabilitado no health
 
-Esta aplicação não usa disco: não há banco, cache em arquivo nem upload. Com o
-`DiskSpaceHealthIndicator` ativo, um volume cheio **no host** faz `/actuator/health`
-responder **503** e a aplicação parecer `DOWN` estando perfeitamente saudável — um teste
-flagrou exatamente isso durante o desenvolvimento, quando o disco da máquina encheu. O
-indicador foi desabilitado (`management.health.diskspace.enabled: false`) e um teste trava
-a decisão. O healthcheck do Compose, por sua vez, sempre usou
-`/actuator/health/readiness`, que reflete só a prontidão da aplicação.
+Esta aplicação não usa disco: não há banco, cache em arquivo nem upload. O
+`DiskSpaceHealthIndicator` mede o espaço livre do caminho onde o processo roda e, por ser
+agregado ao `/actuator/health`, um volume sem espaço faz o endpoint responder **503** e a
+aplicação parecer `DOWN` mesmo atendendo requisições normalmente. Foi o que um teste
+flagrou durante o desenvolvimento, quando o disco da máquina encheu. O indicador foi
+desabilitado (`management.health.diskspace.enabled: false`) e um teste trava a decisão. O
+healthcheck do Compose, por sua vez, sempre usou `/actuator/health/readiness`, que reflete
+só a prontidão da aplicação.
 
 ### Histórico em memória, com buffer limitado
 

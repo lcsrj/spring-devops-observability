@@ -65,20 +65,20 @@ AUDITORIA DA STACK - DevOps Observability Control Center
 
 == 5. Prometheus: target UP e metricas essenciais ==
   target spring-boot-app esta UP                             OK - health=UP
-  memoria Heap da JVM (usada)                                OK - valor = 55496792
+  memoria Heap da JVM (usada)                                OK - valor = 35063944
   memoria Heap da JVM (maxima)                               OK - valor = 5528354816
   memoria Heap da JVM (comprometida)                         OK - valor = 123797504
-  uso de CPU do processo                                     OK - valor = 0.0006691201070592171
+  uso de CPU do processo                                     OK - valor = 0.0004988360492184902
   threads vivas da JVM                                       OK - valor = 23
-  uptime do processo                                         OK - valor = 231.003
-  total de requisicoes HTTP                                  OK - valor = 360
-  RPS (taxa de requisicoes)                                  OK - valor = 1.254864322342682
-  requisicoes 2xx                                            OK - valor = 299
-  requisicoes 4xx                                            OK - valor = 43
-  requisicoes 5xx                                            OK - valor = 18
-  tempo de resposta (buckets p/ percentis)                   OK - valor = 0.020449649242469344
+  uptime do processo                                         OK - valor = 161.954
+  total de requisicoes HTTP                                  OK - valor = 365
+  RPS (taxa de requisicoes)                                  OK - valor = 1.3320876541535516
+  requisicoes 2xx                                            OK - valor = 287
+  requisicoes 4xx                                            OK - valor = 55
+  requisicoes 5xx                                            OK - valor = 23
+  tempo de resposta (buckets p/ percentis)                   OK - valor = 0.01645934421342039
   tag comum application presente                             OK - valor = 2
-  contador proprio de eventos de log                         OK - valor = 24
+  contador proprio de eventos de log                         OK - valor = 28
 
 == 6. Grafana: data source e dashboard provisionados ==
   data source Prometheus provisionado                        OK - data source Prometheus provisionado
@@ -88,23 +88,19 @@ AUDITORIA DA STACK - DevOps Observability Control Center
   os paineis retornam metricas reais                         OK - consulta do dashboard devolve dados reais
 
 == 7. Graylog: Input GELF e logs pesquisaveis ==
-  aguardando indexacao dos logs no Graylog OK - 345 mensagens
+  aguardando indexacao dos logs no Graylog OK - 460 mensagens
   Input GELF UDP existe                                      OK - Input GELF UDP cadastrado
   Input GELF UDP esta RUNNING                                OK - Input em estado RUNNING
-  logs da aplicacao indexados                                OK - 345 mensagem(ns) indexada(s)
-  campo environment presente nos logs                        OK - 345 mensagem(ns) indexada(s)
-  campo version presente nos logs                            OK - 345 mensagem(ns) indexada(s)
-  correlation_id presente nos logs                           OK - 345 mensagem(ns) indexada(s)
-  logs de nivel DEBUG pesquisaveis                           OK - 9 mensagem(ns) indexada(s)
-  logs de nivel INFO pesquisaveis                            OK - 219 mensagem(ns) indexada(s)
-  logs de nivel WARN pesquisaveis                            OK - 78 mensagem(ns) indexada(s)
-  logs de nivel ERROR pesquisaveis                           OK - 39 mensagem(ns) indexada(s)
+  logs da aplicacao indexados                                OK - 485 mensagem(ns) indexada(s)
+  campo environment presente nos logs                        OK - 485 mensagem(ns) indexada(s)
+  campo version presente nos logs                            OK - 485 mensagem(ns) indexada(s)
+  correlation_id presente nos logs                           OK - 465 mensagem(ns) indexada(s)
+  logs de nivel DEBUG pesquisaveis                           OK - 14 mensagem(ns) indexada(s)
+  logs de nivel INFO pesquisaveis                            OK - 318 mensagem(ns) indexada(s)
+  logs de nivel WARN pesquisaveis                            OK - 102 mensagem(ns) indexada(s)
+  logs de nivel ERROR pesquisaveis                           OK - 51 mensagem(ns) indexada(s)
 
 == 8. Suite de testes automatizados ==
-  mvn test (suite completa)                                  FALHOU - [ERROR] Tests run: 8, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.089 s <<< FAILURE! -- in br.com.devops.observability.web.StatusEndpointTests
-[ERROR] br.com.devops.observability.web.StatusEndpointTests.actuatorHealthIsUp -- Time elapsed: 0.040 s <<< FAILURE!
-[ERROR] Failures: 
-[ERROR]   StatusEndpointTests.actuatorHealthIsUp:72 Status expected:<200> but was:<503>
-[ERROR] Tests run: 22, Failures: 1, Errors: 0, Skipped: 0
+  mvn test (suite completa)                                  OK - [INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0
 
-RESULTADO: 1 de 83 verificacoes FALHARAM
+RESULTADO: 83/83 verificacoes passaram

@@ -53,6 +53,7 @@ err()  { echo "${C_RED}ERRO${C_RESET} $*" >&2; }
 
 pass_inline() { echo "${C_GREEN}OK${C_RESET} - $*"; }
 fail_inline() { echo "${C_RED}FALHOU${C_RESET} - $*"; }
+warn_inline() { echo "${C_YELLOW}IGNORADA${C_RESET} - $*"; }
 
 # check <descricao> <comando...>
 # Executa o comando e contabiliza o resultado. Nao aborta: o script segue e

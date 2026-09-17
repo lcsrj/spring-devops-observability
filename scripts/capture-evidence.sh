@@ -32,13 +32,14 @@ if ! curl -sf --max-time 5 "${APP_URL}/actuator/health" >/dev/null; then
 fi
 
 # -----------------------------------------------------------------------------
-# shot <arquivo> <url> [largura] [altura] [orcamento_ms]
+# shot <arquivo> <url> [largura] [altura] [orcamento_ms] [limite_s]
 #
 # Captura a pagina com Chromium headless em container, usando a rede do host.
 #
 # Dois cuidados aprendidos na pratica:
-#  - `timeout` externo: uma SPA que mantem conexoes abertas (o caso do Graylog)
-#    pode impedir o Chromium de encerrar sozinho, travando o script.
+#  - limite de tempo DENTRO do container: uma SPA que mantem conexoes abertas
+#    pode impedir o Chromium de encerrar sozinho. Um `timeout` no host nao
+#    resolve, porque em Git Bash/MSYS o sinal nao chega ao docker.exe.
 #  - orcamento de tempo virtual configuravel: valores altos deixam paineis
 #    pesados terminarem de renderizar, mas em paginas com timers recorrentes o
 #    tempo virtual nunca expira. Para essas, use um valor baixo.
@@ -101,9 +102,27 @@ shot "02-prometheus-targets.png"         "${PROMETHEUS_URL}/targets"         160
 shot "03-prometheus-grafico-rps.png" \
      "${PROMETHEUS_URL}/graph?g0.expr=sum%20by%20(status)%20(rate(http_server_requests_seconds_count%7Bjob%3D%22spring-boot-app%22%7D%5B1m%5D))&g0.tab=0&g0.range_input=15m" \
      1600 1100
-# A interface do Graylog e uma SPA que mantem requisicoes abertas: com orcamento
-# de tempo virtual alto o Chromium nunca conclui. 3s bastam para a tela pintar.
-shot "04-graylog-interface.png"          "${GRAYLOG_URL}/"                   1400 900 3000
+# A captura da interface do Graylog e OPT-IN, desabilitada por padrao.
+#
+# Motivo: em maquinas Windows com Docker Desktop sobre WSL2, o Chromium headless
+# apontado para a SPA do Graylog derruba a VM do WSL. O dump gerado pelo crash
+# ocupa ~14 GB em %LOCALAPPDATA%\Temp\wsl-crashes e enche o disco, o que derruba
+# o proprio Docker em seguida. Foi reproduzido aqui: o dump se chamava
+# `wsl-crash-..._usr_lib_chromium_chromium-5.dmp`.
+#
+# Nenhuma evidencia e perdida: o funcionamento do Graylog e comprovado pela API,
+# que e prova mais forte que um screenshot - `11-graylog-init-logs.txt` (Input
+# GELF criado e idempotente), `16-graylog-logs-por-nivel.txt` (DEBUG/INFO/WARN/
+# ERROR pesquisaveis) e `17-graylog-mensagem-exemplo.txt` (todos os campos da
+# mensagem, com stack trace).
+#
+# Para tentar a captura mesmo assim:  CAPTURE_GRAYLOG_UI=1 ./scripts/capture-evidence.sh
+if [ "${CAPTURE_GRAYLOG_UI:-0}" = "1" ]; then
+    shot "04-graylog-interface.png" "${GRAYLOG_URL}/" 1400 900 3000 30
+else
+    printf '  %-42s ' "04-graylog-interface.png"
+    warn_inline "ignorada (CAPTURE_GRAYLOG_UI=0; derruba a VM do WSL)"
+fi
 
 # -----------------------------------------------------------------------------
 # O dashboard do Grafana exige sessao autenticada, e o Chromium headless nao

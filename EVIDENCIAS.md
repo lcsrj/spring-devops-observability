@@ -29,7 +29,7 @@ docker compose up --build -d
 | 1 | **Pipeline CI/CD automatizada** | **Sim** | GitHub Actions: `mvn test`, `mvn package`, build multistage, validação da imagem, push no GHCR | [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) · seção 4 deste documento |
 | 2 | **Publicação automática no registry** | **Sim** | Job `docker` publica em `ghcr.io` com `GITHUB_TOKEN` (sem PAT) em push na `main` | seção 4 deste documento |
 | 3 | **Orquestração Docker Compose** | **Sim** | `docker compose up --build` sobe 7 serviços; todos `healthy`, sem passo manual | [`10-docker-compose-ps.txt`](docs/evidencias/10-docker-compose-ps.txt) |
-| 4 | **Testes automatizados** | **Sim** | `mvn test` → 22 testes, 0 falhas; também no build da imagem e na pipeline | [`19-mvn-test.txt`](docs/evidencias/19-mvn-test.txt) |
+| 4 | **Testes automatizados** | **Sim** | `mvn test` → 23 testes, 0 falhas; também no build da imagem e na pipeline | [`19-mvn-test.txt`](docs/evidencias/19-mvn-test.txt) |
 | 5 | **Interface web** (não só API) | **Sim** | `GET /` entrega painel Thymeleaf com CSS/JS próprios, sem CDN | [`01-interface-aplicacao.png`](docs/evidencias/01-interface-aplicacao.png) |
 | 6 | **Endpoints mínimos** | **Sim** | 200 / 400 / 500, 4 endpoints de log, gerador de tráfego, status e histórico | [`20-smoke-test.txt`](docs/evidencias/20-smoke-test.txt) · [`21-verify-stack.txt`](docs/evidencias/21-verify-stack.txt) |
 | 7 | **Actuator + Micrometer** | **Sim** | `/actuator/health`, `/actuator/info` e `/actuator/prometheus` respondendo; tags `application`/`environment`/`version` em todas as séries | [`13-actuator-prometheus.txt`](docs/evidencias/13-actuator-prometheus.txt) |
@@ -70,7 +70,7 @@ docker compose up --build -d
 | 5. Prometheus: target UP e métricas | 15 | todas OK |
 | 6. Grafana: provisionamento e dados | 5 | todas OK |
 | 7. Graylog: Input GELF e logs por nível | 10 | todas OK |
-| 8. Suíte de testes (`mvn test`) | 1 | 22 testes, 0 falhas |
+| 8. Suíte de testes (`mvn test`) | 1 | 23 testes, 0 falhas |
 
 `./scripts/smoke-test.sh` → **28/28 verificações passaram** (exit code 0).
 
@@ -119,7 +119,7 @@ pipeline, que **falha** se qualquer ferramenta de build vazar para o runtime.
 
 | Job | Resultado |
 |---|---|
-| Build e testes (JDK 21) | ✅ `success` — `mvn compile`, `mvn test` (22 testes), `mvn package` |
+| Build e testes (JDK 21) | ✅ `success` — `mvn compile`, `mvn test` (23 testes), `mvn package` |
 | Validar docker-compose.yml | ✅ `success` — 7 serviços conferidos, nenhuma tag `latest` |
 | Imagem Docker e publicação no GHCR | ✅ `success` — build multistage, imagem validada, publicada |
 | Varredura de segurança (Trivy) | ✅ `success` — misconfiguration, segredos e vulnerabilidades da imagem |
@@ -181,18 +181,21 @@ Cada correção está em um commit próprio, com a causa documentada na mensagem
 Durante a validação local, a suíte falhou com
 `StatusEndpointTests.actuatorHealthIsUp: Status expected:<200> but was:<503>`.
 
-Investigação: o `DiskSpaceHealthIndicator` do Actuator estava ativo e o disco da máquina de
-desenvolvimento havia enchido, então o indicador reportava `DOWN` e o
-`/actuator/health` agregado respondia **503** — com a aplicação atendendo requisições
-normalmente.
+Investigação: o `DiskSpaceHealthIndicator` do Actuator estava ativo e mede o espaço livre
+do caminho onde o processo roda. Nos testes, esse caminho é o diretório do projeto — no
+volume `C:` da máquina de desenvolvimento, que havia enchido. O indicador reportou `DOWN`
+e, por ser agregado, derrubou `/actuator/health` para **503**. A aplicação atendia
+requisições normalmente; o que estava sem espaço era o disco da máquina.
 
 Correção: o indicador foi desabilitado (`management.health.diskspace.enabled: false`), já
-que a aplicação não usa disco algum, e um teste novo
-(`healthDoesNotDependOnHostDiskSpace`) trava a decisão. O healthcheck do Compose não era
-afetado porque sempre usou `/actuator/health/readiness`.
+que esta aplicação não usa disco algum — sem banco, sem cache em arquivo, sem upload —, e
+um teste novo (`healthDoesNotDependOnHostDiskSpace`) trava a decisão. O healthcheck do
+Compose nunca foi afetado: sempre usou `/actuator/health/readiness`.
 
-Vale registrar: o teste cumpriu exatamente seu papel — apontou uma configuração que faria a
-aplicação parecer `DOWN` por um motivo que não tem relação com a saúde dela.
+Vale registrar duas coisas. O teste cumpriu exatamente seu papel: apontou uma configuração
+que fazia a aplicação parecer `DOWN` por um motivo sem relação com a saúde dela. E o mesmo
+defeito derrubaria o health em produção se o volume do container enchesse por qualquer
+motivo alheio à aplicação — o disco cheio no laptop só antecipou o problema.
 
 ---
 
@@ -205,7 +208,6 @@ aplicação parecer `DOWN` por um motivo que não tem relação com a saúde del
 | `01-interface-aplicacao.png` | Painel da aplicação em execução: cards de estado com dados reais, seções de tráfego e logs, indicador do GELF ativo e histórico com status 200/400/500 |
 | `02-prometheus-targets.png` | *Status → Targets* do Prometheus com `spring-boot-app (1/1 up)` em estado **UP** |
 | `03-prometheus-grafico-rps.png` | Gráfico de requisições por status HTTP ao longo do tempo, no próprio Prometheus |
-| `04-graylog-interface.png` | Interface web do Graylog respondendo em `localhost:9000` |
 | `05-grafana-dashboard.png` | Dashboard *Spring Boot — Application Observability* com os painéis preenchidos |
 
 ### Saídas de comandos e respostas de API
@@ -221,9 +223,22 @@ aplicação parecer `DOWN` por um motivo que não tem relação com a saúde del
 | `16-graylog-logs-por-nivel.txt` | Input GELF, estado `RUNNING` e contagem de mensagens por nível e por campo |
 | `17-graylog-mensagem-exemplo.txt` | Campos de uma mensagem ERROR realmente indexada |
 | `18-multistage-inspecao.txt` | Prova completa da separação dos estágios |
-| `19-mvn-test.txt` | Saída de `mvn test` (22 testes, `BUILD SUCCESS`) |
+| `19-mvn-test.txt` | Saída de `mvn test` (23 testes, `BUILD SUCCESS`) |
 | `20-smoke-test.txt` | Saída do smoke test (28/28) |
 | `21-verify-stack.txt` | Saída da auditoria completa (83/83) |
+
+
+> **Sobre a captura de tela do Graylog.** Ela **não** faz parte das evidências, por decisão
+> técnica. Em Windows com Docker Desktop sobre WSL2, o Chromium headless apontado para a SPA
+> do Graylog derruba a VM do WSL; o dump do crash ocupa ~14 GB, enche o disco e leva o
+> próprio Docker com ele (reproduzido aqui — o arquivo gerado foi
+> `wsl-crash-..._usr_lib_chromium_chromium-5.dmp`). A captura ficou **opt-in** no script
+> (`CAPTURE_GRAYLOG_UI=1`). Nada se perde: o funcionamento do Graylog é comprovado pela
+> própria API, que é prova mais forte que um screenshot — Input GELF criado e idempotente
+> ([`11-graylog-init-logs.txt`](docs/evidencias/11-graylog-init-logs.txt)), os quatro níveis
+> pesquisáveis ([`16-graylog-logs-por-nivel.txt`](docs/evidencias/16-graylog-logs-por-nivel.txt))
+> e a mensagem completa com todos os campos e stack trace
+> ([`17-graylog-mensagem-exemplo.txt`](docs/evidencias/17-graylog-mensagem-exemplo.txt)).
 
 ---
 
