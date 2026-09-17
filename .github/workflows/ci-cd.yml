@@ -326,24 +326,25 @@ jobs:
       #   filesystem -> misconfig + segredos  (nao roda o analisador Java)
       #   image      -> vulnerabilidades      (cobre o SO da imagem E o .jar)
       #
-      # O motivo: ao varrer vulnerabilidades no filesystem, o analisador Java do
-      # Trivy resolve os POMs pai direto no Maven Central e a varredura morre com
-      # `429 Too Many Requests` (o runner compartilha IP de saida; nem
-      # `--offline-scan` nem `--skip-files` evitaram isso). Varrer a IMAGEM da uma
-      # cobertura melhor de qualquer forma: e o artefato que vai para producao, e
-      # o .jar empacotado carrega exatamente as dependencias que serao executadas.
+      # O motivo: o comando `filesystem` roda o analisador Java ao percorrer os
+      # arquivos, qualquer que seja o `--scanners`, e a resolucao dos POMs pai no
+      # Maven Central falha com `429 Too Many Requests` a partir do runner (nem
+      # `--offline-scan` nem `--skip-files` evitaram). Por isso a configuracao usa
+      # o comando dedicado `trivy config`, que percorre apenas arquivos de
+      # configuracao (Dockerfile, Compose, etc.), e as vulnerabilidades ficam no
+      # scan da IMAGEM - que e o artefato publicado e carrega no .jar exatamente
+      # as dependencias executadas em producao.
       #
       # `exit-code 0`: as varreduras sao ADICIONAIS e nao bloqueiam os
       # requisitos obrigatorios do projeto.
       # -----------------------------------------------------------------------
-      - name: Trivy - configuracao do repositorio (misconfiguration)
+      - name: Trivy - misconfiguration do Dockerfile e do Compose
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/scan:ro" \
             -v /tmp/trivy-cache:/root/.cache/trivy \
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
-            filesystem --scanners misconfig \
-              --severity CRITICAL,HIGH \
+            config --severity CRITICAL,HIGH \
               --exit-code 0 --no-progress /scan
 
       - name: Trivy - segredos no repositorio
@@ -353,6 +354,7 @@ jobs:
             -v /tmp/trivy-cache:/root/.cache/trivy \
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
             filesystem --scanners secret \
+              --skip-files pom.xml \
               --exit-code 0 --no-progress /scan
 
       - name: Construir a imagem de runtime para varredura
