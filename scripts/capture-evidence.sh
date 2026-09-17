@@ -32,23 +32,43 @@ if ! curl -sf --max-time 5 "${APP_URL}/actuator/health" >/dev/null; then
 fi
 
 # -----------------------------------------------------------------------------
-# shot <arquivo> <url> [largura] [altura]
+# shot <arquivo> <url> [largura] [altura] [orcamento_ms]
+#
 # Captura a pagina com Chromium headless em container, usando a rede do host.
+#
+# Dois cuidados aprendidos na pratica:
+#  - `timeout` externo: uma SPA que mantem conexoes abertas (o caso do Graylog)
+#    pode impedir o Chromium de encerrar sozinho, travando o script.
+#  - orcamento de tempo virtual configuravel: valores altos deixam paineis
+#    pesados terminarem de renderizar, mas em paginas com timers recorrentes o
+#    tempo virtual nunca expira. Para essas, use um valor baixo.
 # -----------------------------------------------------------------------------
 shot() {
     local file="$1" url="$2" width="${3:-1600}" height="${4:-1400}"
+    local budget="${5:-12000}" limit="${6:-60}"
+    local name="obs-shot-$$-${RANDOM}"
     printf '  %-42s ' "${file}"
-    if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker run --rm --network host \
+
+    rm -f "${OUT_DIR}/${file}"
+
+    # O limite de tempo e aplicado DENTRO do container, com o `timeout` do
+    # busybox. Um `timeout` no host nao resolve: em Git Bash/MSYS o sinal nao
+    # chega ao docker.exe (processo nativo do Windows) e o comando fica preso.
+    local script="timeout ${limit} chromium-browser \
+--headless --no-sandbox --disable-gpu --hide-scrollbars \
+--window-size=${width},${height} \
+--virtual-time-budget=${budget} \
+--screenshot=/out/${file} '${url}' >/dev/null 2>&1; [ -s /out/${file} ]"
+
+    if MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
+        docker run --rm --name "${name}" --network host \
         -v "$(host_path_for_docker "${OUT_DIR}"):/out" \
-        --entrypoint chromium-browser \
-        "${CHROME_IMAGE}" \
-        --headless --no-sandbox --disable-gpu --hide-scrollbars \
-        --window-size="${width},${height}" \
-        --virtual-time-budget=12000 \
-        --screenshot="/out/${file}" \
-        "${url}" >/dev/null 2>&1 && [ -s "${OUT_DIR}/${file}" ]; then
+        --entrypoint sh "${CHROME_IMAGE}" -c "${script}" >/dev/null 2>&1 \
+        && [ -s "${OUT_DIR}/${file}" ]; then
         pass_inline "$(du -h "${OUT_DIR}/${file}" | cut -f1)"
     else
+        # Garante que um Chromium travado nao fique para tras.
+        docker rm -f "${name}" >/dev/null 2>&1 || true
         fail_inline "nao foi possivel capturar ${url}"
     fi
 }
@@ -81,7 +101,9 @@ shot "02-prometheus-targets.png"         "${PROMETHEUS_URL}/targets"         160
 shot "03-prometheus-grafico-rps.png" \
      "${PROMETHEUS_URL}/graph?g0.expr=sum%20by%20(status)%20(rate(http_server_requests_seconds_count%7Bjob%3D%22spring-boot-app%22%7D%5B1m%5D))&g0.tab=0&g0.range_input=15m" \
      1600 1100
-shot "04-graylog-login.png"              "${GRAYLOG_URL}/"                   1400 900
+# A interface do Graylog e uma SPA que mantem requisicoes abertas: com orcamento
+# de tempo virtual alto o Chromium nunca conclui. 3s bastam para a tela pintar.
+shot "04-graylog-interface.png"          "${GRAYLOG_URL}/"                   1400 900 3000
 
 # -----------------------------------------------------------------------------
 # O dashboard do Grafana exige sessao autenticada, e o Chromium headless nao

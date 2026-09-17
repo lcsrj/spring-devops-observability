@@ -74,6 +74,19 @@ class StatusEndpointTests {
     }
 
     @Test
+    @DisplayName("o health nao depende de espaco em disco do host")
+    void healthDoesNotDependOnHostDiskSpace() throws Exception {
+        // O indicador diskSpace esta desabilitado de proposito: a aplicacao nao usa
+        // disco, e um volume cheio no host faria /actuator/health responder 503 com a
+        // aplicacao perfeitamente saudavel. Este teste trava essa decisao.
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.diskSpace").doesNotExist())
+                .andExpect(jsonPath("$.components.ping.status").value("UP"))
+                .andExpect(jsonPath("$.components.readinessState.status").value("UP"));
+    }
+
+    @Test
     @DisplayName("GET /actuator/info expõe nome, versao e ambiente")
     void actuatorInfoExposesMetadata() throws Exception {
         mockMvc.perform(get("/actuator/info"))

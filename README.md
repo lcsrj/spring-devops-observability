@@ -1,5 +1,11 @@
 # DevOps Observability Control Center
 
+[![CI/CD](https://github.com/lcsrj/spring-devops-observability/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/lcsrj/spring-devops-observability/actions/workflows/ci-cd.yml)
+[![Java](https://img.shields.io/badge/Java-21%20LTS-ED8B00)](https://adoptium.net/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.3-6DB33F)](https://spring.io/projects/spring-boot)
+[![Docker](https://img.shields.io/badge/Docker-multistage-2496ED)](Dockerfile)
+[![GHCR](https://img.shields.io/badge/GHCR-published-181717)](https://github.com/lcsrj/spring-devops-observability/pkgs/container/spring-devops-observability)
+
 Projeto prático de **Automação, Observabilidade e esteira DevSecOps** construído sobre uma
 aplicação **Java 21 / Spring Boot 3.5**, com interface web própria, imagem Docker
 **multistage**, pipeline CI/CD no GitHub Actions com publicação no GHCR, métricas no
@@ -468,7 +474,8 @@ respeitam as portas definidas no `.env`.
 | `./scripts/wait-stack.sh [timeout]` | Espera todos os containers ficarem `healthy`, o `graylog-init` terminar com exit 0 e os endpoints HTTP responderem. Usa readiness real, sem `sleep` cego. |
 | `./scripts/generate-traffic.sh [rodadas]` | Gera tráfego 2xx / 4xx / 5xx e emite logs nos quatro níveis. |
 | `./scripts/smoke-test.sh` | 28 verificações: aplicação, interface, actuator, endpoint Prometheus da app, Prometheus, Grafana e Graylog. |
-| `./scripts/verify-stack.sh` | Auditoria completa (~80 verificações): arquivos obrigatórios, multistage real, inspeção da imagem, containers healthy, endpoints, target UP e métricas com valor, Grafana provisionado e devolvendo dados, Input GELF RUNNING, logs dos 4 níveis pesquisáveis e `mvn test`. |
+| `./scripts/verify-stack.sh` | Auditoria completa (83 verificações): arquivos obrigatórios, multistage real, inspeção da imagem, containers healthy, endpoints, target UP e métricas com valor, Grafana provisionado e devolvendo dados, Input GELF RUNNING, logs dos 4 níveis pesquisáveis e `mvn test`. |
+| `./scripts/capture-evidence.sh` | Gera as evidências de `docs/evidencias/`: capturas de tela com Chromium headless em container (nada a instalar) e saídas reais de comandos e de API. |
 | `./scripts/lib.sh` | Funções compartilhadas (não é executado diretamente). |
 
 Sequência recomendada para uma validação limpa:
@@ -480,6 +487,7 @@ docker compose up --build -d
 ./scripts/smoke-test.sh
 ./scripts/generate-traffic.sh 3
 ./scripts/verify-stack.sh
+./scripts/capture-evidence.sh   # opcional: regenera docs/evidencias/
 ```
 
 Opções úteis do `verify-stack.sh`:
@@ -824,6 +832,16 @@ Spring MVC e transformava **404 em 500** (falha detectada por teste automatizado
 desenvolvimento). Estendendo `ResponseEntityExceptionHandler`, as exceções do framework
 mantêm o status correto e apenas as falhas da própria aplicação caem na rede de segurança.
 
+### Indicador de espaço em disco desabilitado no health
+
+Esta aplicação não usa disco: não há banco, cache em arquivo nem upload. Com o
+`DiskSpaceHealthIndicator` ativo, um volume cheio **no host** faz `/actuator/health`
+responder **503** e a aplicação parecer `DOWN` estando perfeitamente saudável — um teste
+flagrou exatamente isso durante o desenvolvimento, quando o disco da máquina encheu. O
+indicador foi desabilitado (`management.health.diskspace.enabled: false`) e um teste trava
+a decisão. O healthcheck do Compose, por sua vez, sempre usou
+`/actuator/health/readiness`, que reflete só a prontidão da aplicação.
+
 ### Histórico em memória, com buffer limitado
 
 Banco de dados na aplicação não é requisito do projeto. O histórico é um
@@ -898,6 +916,7 @@ entre a máquina do desenvolvedor, o build da imagem e a pipeline.
 | `graylog-init` termina com exit != 0 | Graylog demorou além do limite | `docker compose logs graylog-init`; para reexecutar: `docker compose up -d --force-recreate graylog-init` (é idempotente) |
 | Build Maven lento na primeira vez | Download das dependências | Normal; as execuções seguintes usam o cache de camadas do Docker |
 | Estado inconsistente após alterações | Volumes antigos | `docker compose down -v && docker compose up --build -d` |
+| Comandos `docker` travando, disco cheio | Cada `--build` acrescenta camadas ao cache de build, que cresce rápido (chegou a 12 GB durante o desenvolvimento) | Use `docker compose up -d` (sem `--build`) quando a imagem já existir; para recuperar espaço: `docker builder prune -af` e `docker image prune -a` |
 
 Logs úteis:
 

@@ -1,0 +1,63 @@
+# Saida de 'mvn test' na mesma imagem do estagio de build
+# Coletado em 2026-09-17T19:08:04Z
+
+       Attributes = null
+
+MockHttpServletResponse:
+           Status = 503
+    Error message = null
+          Headers = [X-Correlation-Id:"63bda5b2-cc28-4cde-b4a4-b59657654f0d", Content-Type:"application/vnd.spring-boot.actuator.v3+json"]
+     Content type = application/vnd.spring-boot.actuator.v3+json
+             Body = {"status":"DOWN","groups":["liveness","readiness"],"components":{"diskSpace":{"status":"DOWN","details":{"total":255378173952,"free":0,"threshold":10485760,"path":"/workspace/.","exists":true}},"livenessState":{"status":"UP"},"ping":{"status":"UP"},"readinessState":{"status":"UP"},"ssl":{"status":"UP","details":{"validChains":[],"invalidChains":[]}}}}
+    Forwarded URL = null
+   Redirected URL = null
+          Cookies = []
+[ERROR] Tests run: 8, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.472 s <<< FAILURE! -- in br.com.devops.observability.web.StatusEndpointTests
+[ERROR] br.com.devops.observability.web.StatusEndpointTests.actuatorHealthIsUp -- Time elapsed: 0.072 s <<< FAILURE!
+java.lang.AssertionError: Status expected:<200> but was:<503>
+	at org.springframework.test.util.AssertionErrors.fail(AssertionErrors.java:61)
+	at org.springframework.test.util.AssertionErrors.assertEquals(AssertionErrors.java:128)
+	at org.springframework.test.web.servlet.result.StatusResultMatchers.lambda$matcher$9(StatusResultMatchers.java:640)
+	at org.springframework.test.web.servlet.MockMvc$1.andExpect(MockMvc.java:214)
+	at br.com.devops.observability.web.StatusEndpointTests.actuatorHealthIsUp(StatusEndpointTests.java:72)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[INFO] Running br.com.devops.observability.web.TrafficGeneratorIntegrationTests
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.3)
+
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.160 s -- in br.com.devops.observability.web.TrafficGeneratorIntegrationTests
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   StatusEndpointTests.actuatorHealthIsUp:72 Status expected:<200> but was:<503>
+[INFO] 
+[ERROR] Tests run: 22, Failures: 1, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  23.748 s
+[INFO] Finished at: 2026-09-17T19:08:29Z
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.3:test (default-test) on project spring-devops-observability: There are test failures.
+[ERROR] 
+[ERROR] See /workspace/target/surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

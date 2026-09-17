@@ -1,0 +1,15 @@
+# Exemplo de mensagem ERROR realmente indexada no Graylog
+# Coletado em 2026-09-17T19:08:00Z
+
+"level":3
+"source":"spring-app"
+"version":"1.0.0"
+"environment":"docker"
+"level_name":"ERROR"
+"root_cause_class_name":"br.com.devops.observability.web.DemoServerException"
+"application":"spring-devops-observability"
+"thread_name":"http-nio-8080-exec-7"
+"correlation_id":"d315e93b-ed44-4b11-a051-424b39ef7021"
+"logger_name":"br.com.devops.observability.web.ApiExceptionHandler"
+"timestamp":"2026-09-17T19:06:16.405Z"}
+"total_results":34

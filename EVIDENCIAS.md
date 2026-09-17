@@ -108,8 +108,91 @@ pipeline, que **falha** se qualquer ferramenta de build vazar para o runtime.
 
 ## 4. Pipeline CI/CD e GHCR
 
-Preenchido após o push para o GitHub — veja a seção
-[Status da pipeline](#status-da-pipeline) no final deste documento.
+### Execução real do GitHub Actions
+
+| | |
+|---|---|
+| **Run** | [#35260193812](https://github.com/lcsrj/spring-devops-observability/actions/runs/35260193812) |
+| **Commit** | `2db9b293ac38bc5ff3d837f5850cdf5219d4aeca` |
+| **Gatilho** | `push` na branch `main` |
+| **Conclusão** | ✅ **`success`** |
+
+| Job | Resultado |
+|---|---|
+| Build e testes (JDK 21) | ✅ `success` — `mvn compile`, `mvn test` (22 testes), `mvn package` |
+| Validar docker-compose.yml | ✅ `success` — 7 serviços conferidos, nenhuma tag `latest` |
+| Imagem Docker e publicação no GHCR | ✅ `success` — build multistage, imagem validada, publicada |
+| Varredura de segurança (Trivy) | ✅ `success` — misconfiguration, segredos e vulnerabilidades da imagem |
+
+### Imagem publicada no GHCR
+
+```text
+ghcr.io/lcsrj/spring-devops-observability:latest
+ghcr.io/lcsrj/spring-devops-observability:1.0.0
+ghcr.io/lcsrj/spring-devops-observability:main
+ghcr.io/lcsrj/spring-devops-observability:sha-2db9b29
+```
+
+Pacote: https://github.com/lcsrj/spring-devops-observability/pkgs/container/spring-devops-observability
+
+```bash
+docker pull ghcr.io/lcsrj/spring-devops-observability:latest
+```
+
+### Prova de que a imagem no GHCR está correta
+
+O job `docker` não apenas publicou: ele fez **`docker pull` da imagem de volta do GHCR**,
+inspecionou o conteúdo e subiu a aplicação a partir dela. Trecho literal do log da execução:
+
+```text
+ok: sem mvn/javac/jar
+ok: sem codigo-fonte na imagem final
+imagem: [ghcr.io/lcsrj/spring-devops-observability:main] / tamanho: 266707788 bytes
+aplicacao pronta apos 3 tentativa(s)
+  ok  GET /                      -> 200
+  ok  GET /api/status            -> 200
+  ok  GET /api/demo/ok           -> 200
+  ok  GET /api/demo/bad-request  -> 400
+  ok  GET /api/demo/error        -> 500
+  ok  /actuator/prometheus expoe metricas da JVM
+  ok  /actuator/prometheus expoe metricas HTTP
+  ok  /actuator/prometheus aplica as tags comuns
+```
+
+Ou seja: a imagem que está no registry é a imagem multistage enxuta, e a aplicação funciona
+quando executada a partir dela.
+
+### Defeitos reais corrigidos até a pipeline ficar verde
+
+A pipeline não passou de primeira. Os problemas foram diagnosticados pelos logs e corrigidos:
+
+| # | Sintoma | Causa | Correção |
+|---|---|---|---|
+| 1 | `unable to find version 0.28.0` | as tags de `aquasecurity/trivy-action` usam prefixo `v` | versão corrigida |
+| 2 | step falhava com `exit 23` **apesar de a aplicação responder certo** | `curl \| grep -q` sob `set -o pipefail`: o `grep -q` encerra no primeiro match, fecha o pipe e o produtor morre com *Broken pipe* | respostas gravadas em arquivo; `grep` lê o arquivo, sem pipe |
+| 3 | `setup-trivy` falhava ao baixar o binário | dependência de download de asset externo | Trivy passou a rodar pela imagem oficial `aquasec/trivy:0.74.0` |
+| 4 | `remote Maven repository returned 429 Too Many Requests` | `trivy filesystem` aciona o analisador Java e resolve POMs pai no Maven Central a partir do runner | varredura de configuração passou a usar `trivy config`; vulnerabilidades ficaram no scan da **imagem** |
+| 5 | `unknown flag: --no-progress` | `trivy config` não aceita essa flag | flag removida |
+
+Cada correção está em um commit próprio, com a causa documentada na mensagem.
+
+### Um defeito de configuração flagrado pelos próprios testes
+
+Durante a validação local, a suíte falhou com
+`StatusEndpointTests.actuatorHealthIsUp: Status expected:<200> but was:<503>`.
+
+Investigação: o `DiskSpaceHealthIndicator` do Actuator estava ativo e o disco da máquina de
+desenvolvimento havia enchido, então o indicador reportava `DOWN` e o
+`/actuator/health` agregado respondia **503** — com a aplicação atendendo requisições
+normalmente.
+
+Correção: o indicador foi desabilitado (`management.health.diskspace.enabled: false`), já
+que a aplicação não usa disco algum, e um teste novo
+(`healthDoesNotDependOnHostDiskSpace`) trava a decisão. O healthcheck do Compose não era
+afetado porque sempre usou `/actuator/health/readiness`.
+
+Vale registrar: o teste cumpriu exatamente seu papel — apontou uma configuração que faria a
+aplicação parecer `DOWN` por um motivo que não tem relação com a saúde dela.
 
 ---
 
@@ -122,7 +205,7 @@ Preenchido após o push para o GitHub — veja a seção
 | `01-interface-aplicacao.png` | Painel da aplicação em execução: cards de estado com dados reais, seções de tráfego e logs, indicador do GELF ativo e histórico com status 200/400/500 |
 | `02-prometheus-targets.png` | *Status → Targets* do Prometheus com `spring-boot-app (1/1 up)` em estado **UP** |
 | `03-prometheus-grafico-rps.png` | Gráfico de requisições por status HTTP ao longo do tempo, no próprio Prometheus |
-| `04-graylog-login.png` | Interface web do Graylog respondendo em `localhost:9000` |
+| `04-graylog-interface.png` | Interface web do Graylog respondendo em `localhost:9000` |
 | `05-grafana-dashboard.png` | Dashboard *Spring Boot — Application Observability* com os painéis preenchidos |
 
 ### Saídas de comandos e respostas de API
@@ -172,12 +255,20 @@ Preenchido após o push para o GitHub — veja a seção
 | Git está limpo | ✅ |
 | Repositório GitHub foi criado | ✅ |
 | Código foi enviado | ✅ |
-| GitHub Actions foi executado | ver [Status da pipeline](#status-da-pipeline) |
-| Pipeline ficou verde | ver [Status da pipeline](#status-da-pipeline) |
-| Imagem publicada no GHCR | ver [Status da pipeline](#status-da-pipeline) |
+| GitHub Actions foi executado | ✅ |
+| Pipeline ficou verde | ✅ `conclusion: success` nos 4 jobs |
+| Imagem publicada no GHCR | ✅ 4 tags, validada por `docker pull` no próprio CI |
 
 ---
 
-## Status da pipeline
+## 7. Links diretos para verificação
 
-*Esta seção é preenchida com o resultado real da execução do GitHub Actions após o push.*
+| O que | Onde |
+|---|---|
+| Repositório | https://github.com/lcsrj/spring-devops-observability |
+| Execuções da pipeline | https://github.com/lcsrj/spring-devops-observability/actions |
+| Execução verde de referência | https://github.com/lcsrj/spring-devops-observability/actions/runs/35260193812 |
+| Imagem no GHCR | https://github.com/lcsrj/spring-devops-observability/pkgs/container/spring-devops-observability |
+| Workflow | [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) |
+| Dockerfile multistage | [`Dockerfile`](Dockerfile) |
+| Stack completa | [`docker-compose.yml`](docker-compose.yml) |

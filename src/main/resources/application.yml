@@ -43,7 +43,13 @@ management:
         enabled: true
   health:
     diskspace:
-      enabled: true
+      # Desabilitado de proposito. Esta aplicacao nao usa disco (nao ha banco,
+      # cache em arquivo nem upload), entao espaco livre no volume nao diz nada
+      # sobre a capacidade dela de atender requisicoes. Com o indicador ativo,
+      # um disco cheio no HOST faz /actuator/health responder 503 e a aplicacao
+      # parecer DOWN estando perfeitamente saudavel - foi exatamente o que um
+      # teste flagrou durante o desenvolvimento.
+      enabled: false
   info:
     env:
       enabled: true
