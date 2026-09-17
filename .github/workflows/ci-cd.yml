@@ -34,6 +34,7 @@ permissions:
 env:
   JAVA_VERSION: '21'
   REGISTRY: ghcr.io
+  TRIVY_VERSION: '0.74.0'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -202,7 +203,10 @@ jobs:
       - name: Validar que a imagem de runtime esta enxuta
         run: |
           set -euo pipefail
-          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
+          # `sed -n 1p` em vez de `head -1`: o head encerra apos a primeira linha
+          # e pode fechar o pipe antes do echo terminar, o que com `pipefail`
+          # faria o step falhar mesmo estando tudo correto.
+          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" > /tmp/tags.txt; sed -n '1p' /tmp/tags.txt)
           echo "Validando ${IMAGE}"
 
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -236,16 +240,21 @@ jobs:
       - name: Subir a aplicacao a partir da imagem e validar os endpoints
         run: |
           set -euo pipefail
-          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
+          # Mesma precaucao do step anterior: a primeira tag e lida de um arquivo,
+          # sem `echo | head`, que poderia falhar por Broken pipe com `pipefail`.
+          IMAGE=$(echo "${{ steps.meta.outputs.tags }}" > /tmp/tags.txt; sed -n '1p' /tmp/tags.txt)
           docker run -d --name ci-app -p 8080:8080 "${IMAGE}"
 
+          # IMPORTANTE: nenhuma checagem abaixo usa pipe.
+          # Com `set -o pipefail`, um `curl | grep -q` (ou `echo | grep -q`)
+          # falha mesmo quando o conteudo esta correto: o `grep -q` encerra no
+          # primeiro match e fecha o pipe, e o processo da esquerda morre com
+          # erro de escrita (Broken pipe). Por isso a resposta vai para arquivo
+          # e o grep le o arquivo.
           echo "aguardando readiness..."
           for i in $(seq 1 45); do
-            # A saida e guardada antes do grep: com `set -o pipefail`, um
-            # `curl | grep -q` falharia porque o grep fecha o pipe no primeiro
-            # match e o curl termina com erro de escrita (exit 23).
-            READY=$(curl -sf http://localhost:8080/actuator/health/readiness || true)
-            if echo "${READY}" | grep -q '"status":"UP"'; then
+            curl -sf http://localhost:8080/actuator/health/readiness -o /tmp/readiness.json || true
+            if [ -s /tmp/readiness.json ] && grep -q '"status":"UP"' /tmp/readiness.json; then
               echo "aplicacao pronta apos ${i} tentativa(s)"
               break
             fi
@@ -263,12 +272,12 @@ jobs:
           echo "  ok  GET /api/demo/bad-request  -> 400"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/demo/error)" = "500"
           echo "  ok  GET /api/demo/error        -> 500"
-          METRICS=$(curl -sf http://localhost:8080/actuator/prometheus)
-          echo "${METRICS}" | grep -q 'jvm_memory_used_bytes'
+          curl -sf http://localhost:8080/actuator/prometheus -o /tmp/metrics.txt
+          grep -q 'jvm_memory_used_bytes' /tmp/metrics.txt
           echo "  ok  /actuator/prometheus expoe metricas da JVM"
-          echo "${METRICS}" | grep -q 'http_server_requests_seconds_count'
+          grep -q 'http_server_requests_seconds_count' /tmp/metrics.txt
           echo "  ok  /actuator/prometheus expoe metricas HTTP"
-          echo "${METRICS}" | grep -q 'application="spring-devops-observability"'
+          grep -q 'application="spring-devops-observability"' /tmp/metrics.txt
           echo "  ok  /actuator/prometheus aplica as tags comuns"
 
           docker rm -f ci-app
@@ -306,34 +315,42 @@ jobs:
       - name: Checkout do codigo
         uses: actions/checkout@v4
 
+      # -----------------------------------------------------------------------
+      # O Trivy roda pela IMAGEM OFICIAL, e nao pela action: a action depende do
+      # sub-passo `setup-trivy`, que baixa o binario de release e falhou nesta
+      # pipeline (`Cache not found` + exit 1). Usando a imagem, a versao fica
+      # fixada e a varredura nao depende de download de asset externo.
+      #
+      # `exit-code 0`: as varreduras sao ADICIONAIS e nao bloqueiam os
+      # requisitos obrigatorios do projeto.
+      # -----------------------------------------------------------------------
       - name: Trivy - dependencias e configuracao do repositorio
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          scan-type: fs
-          scan-ref: .
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '0'
-          format: table
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/scan:ro" \
+            -v /tmp/trivy-cache:/root/.cache/trivy \
+            aquasec/trivy:${{ env.TRIVY_VERSION }} \
+            filesystem --scanners vuln,misconfig \
+              --severity CRITICAL,HIGH --ignore-unfixed \
+              --exit-code 0 --no-progress /scan
 
-      - name: Construir a imagem para varredura
+      - name: Trivy - segredos no repositorio
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/scan:ro" \
+            -v /tmp/trivy-cache:/root/.cache/trivy \
+            aquasec/trivy:${{ env.TRIVY_VERSION }} \
+            filesystem --scanners secret \
+              --exit-code 0 --no-progress /scan
+
+      - name: Construir a imagem de runtime para varredura
         run: docker build -t scan-target:ci --target runtime .
 
       - name: Trivy - imagem Docker de runtime
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          scan-type: image
-          image-ref: scan-target:ci
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '0'
-          format: table
-
-      - name: Trivy - segredos no repositorio
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: secret
-          exit-code: '0'
-          format: table
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v /tmp/trivy-cache:/root/.cache/trivy \
+            aquasec/trivy:${{ env.TRIVY_VERSION }} \
+            image --severity CRITICAL,HIGH --ignore-unfixed \
+              --exit-code 0 --no-progress scan-target:ci
