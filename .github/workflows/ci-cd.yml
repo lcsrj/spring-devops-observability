@@ -321,25 +321,29 @@ jobs:
       # pipeline (`Cache not found` + exit 1). Usando a imagem, a versao fica
       # fixada e a varredura nao depende de download de asset externo.
       #
-      # O scan de filesystem ignora o pom.xml: o analisador Java do Trivy
-      # resolve os POMs pai no Maven Central e a varredura morre com
-      # `429 Too Many Requests` (o runner compartilha IP de saida, e
-      # `--offline-scan` nao cobre esse analisador). As dependencias da
-      # aplicacao continuam cobertas pelo scan da IMAGEM mais abaixo, que
-      # inspeciona o .jar empacotado - cobertura equivalente e deterministica.
+      # Divisao deliberada de responsabilidades entre as varreduras:
+      #
+      #   filesystem -> misconfig + segredos  (nao roda o analisador Java)
+      #   image      -> vulnerabilidades      (cobre o SO da imagem E o .jar)
+      #
+      # O motivo: ao varrer vulnerabilidades no filesystem, o analisador Java do
+      # Trivy resolve os POMs pai direto no Maven Central e a varredura morre com
+      # `429 Too Many Requests` (o runner compartilha IP de saida; nem
+      # `--offline-scan` nem `--skip-files` evitaram isso). Varrer a IMAGEM da uma
+      # cobertura melhor de qualquer forma: e o artefato que vai para producao, e
+      # o .jar empacotado carrega exatamente as dependencias que serao executadas.
       #
       # `exit-code 0`: as varreduras sao ADICIONAIS e nao bloqueiam os
       # requisitos obrigatorios do projeto.
       # -----------------------------------------------------------------------
-      - name: Trivy - dependencias e configuracao do repositorio
+      - name: Trivy - configuracao do repositorio (misconfiguration)
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/scan:ro" \
             -v /tmp/trivy-cache:/root/.cache/trivy \
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
-            filesystem --scanners vuln,misconfig \
-              --severity CRITICAL,HIGH --ignore-unfixed \
-              --offline-scan --skip-files /scan/pom.xml \
+            filesystem --scanners misconfig \
+              --severity CRITICAL,HIGH \
               --exit-code 0 --no-progress /scan
 
       - name: Trivy - segredos no repositorio
@@ -354,11 +358,13 @@ jobs:
       - name: Construir a imagem de runtime para varredura
         run: docker build -t scan-target:ci --target runtime .
 
-      - name: Trivy - imagem Docker de runtime
+      - name: Trivy - vulnerabilidades na imagem de runtime (SO + .jar)
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v /tmp/trivy-cache:/root/.cache/trivy \
             aquasec/trivy:${{ env.TRIVY_VERSION }} \
-            image --severity CRITICAL,HIGH --ignore-unfixed \
+            image --scanners vuln \
+              --severity CRITICAL,HIGH --ignore-unfixed \
+              --offline-scan \
               --exit-code 0 --no-progress scan-target:ci
